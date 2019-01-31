@@ -357,17 +357,14 @@
                 ]
             }
         },
-        "AuroraDB": {
-            "Type": "AWS::RDS::DBInstance",
+        "AuroraDBCluster": {
+            "Type": "AWS::RDS::DBCluster",
             "Properties":
             {
-                "AllocatedStorage": "35",
-                "DBInstanceClass": "db.m4.large",
-                "DBInstanceIdentifier": "f1-demo-aurora",
+                "DBClusterIdentifier": "f1-demo-aurora",
                 "DBSubnetGroupName": "aurorasubnet",
-                "PubliclyAccessible": true,
                 "Engine": "aurora-mysql",
-                "VPCSecurityGroups": [
+                "VpcSecurityGroupIds": [
                     {
                         "Ref": "AuroraSecurityGroup"
                     }
@@ -377,7 +374,21 @@
                 },
                 "MasterUserPassword": {
                     "Ref": "DBPassword"
-                }
+                },
+                "DBClusterParameterGroupName": "default.aurora-mysql5.7"
+            }
+        },
+        "AuroraDBInstance": {
+            "Type": "AWS::RDS::DBInstance",
+            "Properties": {
+                "DBSubnetGroupName": "aurorasubnet",
+                "Engine": "aurora-mysql",
+                "DBClusterIdentifier": {
+                    "Ref": "AuroraDBCluster"
+                },
+                "PubliclyAccessible": "true",
+                "DBInstanceClass": "db.r4.large",
+                "DBParameterGroupName": "default.aurora-mysql5.7"
             }
         }
     },
