@@ -295,6 +295,31 @@
                 ]
             }
         },
+        "LDMSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPCID"
+                },
+                "GroupDescription": "Security group for LDM container",
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": {
+                            "Ref": "CIDRBlockCluster"
+                        },
+                        "IpProtocol": -1
+                    },
+                    {
+                        "CidrIp": {
+                            "Ref": "AdminIngressLocation"
+                        },
+                        "IpProtocol": "tcp",
+                        "FromPort": "10080",
+                        "ToPort": "10080"
+                    }
+                ]
+            }
+        },
         "SpotfireEC2Setup": {
             "Type": "AWS::EC2::Instance",
             "Properties": {
@@ -336,6 +361,84 @@
             "Properties": {
                 "ClusterName": {
                     "Ref": "AWS::StackName"
+                }
+            }
+        },
+        "LDMTaskDefinition": {
+            "Type": "AWS::ECS::TaskDefinition",
+            "Properties": {
+                "ContainerDefinitions": [
+                    {
+                        "Image": "ayh20/f1_ldm",
+                        "Memory": 8192,
+                        "Cpu": 4096,
+                        "Name": "f1-ldm",
+                        "PortMappings": [
+                            {
+                                "ContainerPort": 10080,
+                                "HostPort": 10080,
+                                "Protocol": "tcp"
+                            },
+                            {
+                                "ContainerPort": 2000,
+                                "HostPort": 2000,
+                                "Protocol": "tcp"
+                            },
+                            {
+                                "ContainerPort": 10000,
+                                "HostPort": 10000,
+                                "Protocol": "tcp"
+                            }
+                        ],
+                        "Environment": [
+                            {
+                                "Name": "NODENAME",
+                                "Value": "A.f1-ldm"
+                            }
+                        ]
+                    }
+                ],
+                "Memory": "8192",
+                "Cpu": "4096",
+                "NetworkMode": "awsvpc",
+                "RequiresCompatibilities": [
+                    "FARGATE"
+                ],
+                "Family": "f1-demo"
+            }
+        },
+        "LDMService": {
+            "Type": "AWS::ECS::Service",
+            "Properties": {
+                "Cluster": {
+                    "Ref": "ECSCluster"
+                },
+                "DesiredCount": 1,
+                "ServiceName": "LVHost",
+                "LaunchType": "FARGATE",
+                "NetworkConfiguration": {
+                    "AwsvpcConfiguration": {
+                        "AssignPublicIp": "ENABLED",
+                        "SecurityGroups": [
+                            {
+                                "Ref": "LDMSecurityGroup"
+                            }
+                        ],
+                        "Subnets": [
+                            {
+                                "Ref": "PublicSubnet1ID"
+                            },
+                            {
+                                "Ref": "PublicSubnet2ID"
+                            },
+                            {
+                                "Ref": "PublicSubnet3ID"
+                            }
+                        ]
+                    }
+                },
+                "TaskDefinition": {
+                    "Ref": "LDMTaskDefinition"
                 }
             }
         },
