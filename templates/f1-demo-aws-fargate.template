@@ -230,7 +230,7 @@
     "Mappings": {
         "AWSAMIRegionMap": {
             "eu-west-1": {
-                "AMI": "ami-0fc35be881cce108c"
+                "AMI": "ami-0e2ef57c1114a572e"
             }
         }
     },
@@ -320,8 +320,26 @@
                 ]
             }
         },
+        "CEPSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPCID"
+                },
+                "GroupDescription": "Security group for CEP container",
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": {
+                            "Ref": "CIDRBlockCluster"
+                        },
+                        "IpProtocol": -1
+                    }
+                ]
+            }
+        },
         "SpotfireEC2Setup": {
             "Type": "AWS::EC2::Instance",
+            "DependsOn": "AuroraDBInstance",
             "Properties": {
                 "ImageId": {
                     "Fn::FindInMap": [
@@ -353,7 +371,44 @@
                             "Fn::Sub": "${AWS::StackName} - Spotfire"
                         }
                     }
-                ]
+                ],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "<script>\n",
+                                "cd C:\\Users\\Administrator\\Desktop\\sql_setup\n",
+                                "echo %DATE% %TIME% >> %SystemRoot%\\Temp\\time.log\n",
+                                "mysql -h ",
+                                {
+                                    "Fn::GetAtt": [
+                                        "AuroraDBInstance",
+                                        "Endpoint.Address"
+                                    ]
+                                },
+                                " -P ",
+                                {
+                                    "Fn::GetAtt": [
+                                        "AuroraDBInstance",
+                                        "Endpoint.Port"
+                                    ]
+                                },
+                                " -u ",
+                                {
+                                    "Ref": "DBUsername"
+                                },
+                                " -p",
+                                {
+                                    "Ref": "DBPassword"
+                                },
+                                " < DB_export18v7_general.sql\n",
+                                "echo %TIME% >> %SystemRoot%\\Temp\\time.log\n",
+                                "</script>\n"
+                            ]
+                        ]
+                    }
+                }
             }
         },
         "ECSCluster": {
@@ -442,6 +497,88 @@
                 }
             }
         },
+        "CEPTaskDefinition": {
+            "Type": "AWS::ECS::TaskDefinition",
+            "Properties": {
+                "ContainerDefinitions": [
+                    {
+                        "Image": "ayh20/f1_cep",
+                        "Memory": 4096,
+                        "Cpu": 2048,
+                        "Name": "f1-cep",
+                        "PortMappings": [
+                            {
+                                "ContainerPort": 8080,
+                                "HostPort": 8080,
+                                "Protocol": "tcp"
+                            },
+                            {
+                                "ContainerPort": 10000,
+                                "HostPort": 10000,
+                                "Protocol": "tcp"
+                            },
+                            {
+                                "ContainerPort": 2000,
+                                "HostPort": 2000,
+                                "Protocol": "tcp"
+                            }
+                        ],
+                        "Environment": [
+                            {
+                                "Name": "NODENAME",
+                                "Value": "A.f1-cep"
+                            },
+                            {
+                                "Name": "SUBSTITUTIONS",
+                                "Value": "DB_URL=a"
+                            }
+                        ]
+                    }
+                ],
+                "Memory": "4096",
+                "Cpu": "2048",
+                "NetworkMode": "awsvpc",
+                "RequiresCompatibilities": [
+                    "FARGATE"
+                ],
+                "Family": "f1-Cep"
+            }
+        },
+        "CEPService": {
+            "Type": "AWS::ECS::Service",
+            "Properties": {
+                "Cluster": {
+                    "Ref": "ECSCluster"
+                },
+                "DesiredCount": 1,
+                "ServiceName": "CEPHost",
+                "LaunchType": "FARGATE",
+                "NetworkConfiguration": {
+                    "AwsvpcConfiguration": {
+                        "AssignPublicIp": "ENABLED",
+                        "SecurityGroups": [
+                            {
+                                "Ref": "CEPSecurityGroup"
+                            }
+                        ],
+                        "Subnets": [
+                            {
+                                "Ref": "PublicSubnet1ID"
+                            },
+                            {
+                                "Ref": "PublicSubnet2ID"
+                            },
+                            {
+                                "Ref": "PublicSubnet3ID"
+                            }
+                        ]
+                    }
+                },
+                "TaskDefinition": {
+                    "Ref": "CEPTaskDefinition"
+                }
+            }
+        },
         "dbSubnetGroup": {
             "Type": "AWS::RDS::DBSubnetGroup",
             "Properties": {
@@ -502,6 +639,15 @@
                 "Fn::GetAtt": [
                     "SpotfireEC2Setup",
                     "PublicIp"
+                ]
+            }
+        },
+        "AuroraDB":{
+            "Description": "Endpoint of Aurora DB",
+            "Value": {
+                "Fn::GetAtt": [
+                    "AuroraDBInstance",
+                    "Endpoint.Address"
                 ]
             }
         },
