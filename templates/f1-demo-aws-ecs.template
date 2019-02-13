@@ -290,7 +290,7 @@
     "Mappings": {
         "AWSAMIRegionMap": {
             "eu-west-1": {
-                "AMI": "ami-09631710568c18d28"
+                "AMI": "ami-0890627e6a66a65fb"
             }
         },
         "ECSAMIRegionMap": {
