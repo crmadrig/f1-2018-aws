@@ -134,7 +134,7 @@
                 "c5.4xlarge"
             ],
             "ConstraintDescription": "ClusterInstanceType must be a valid EC2 instance type.",
-            "Default": "t5.xlarge",
+            "Default": "m5.xlarge",
             "Description": "Select an instance type for EC2 instances to be created in the ECS cluster.",
             "Type": "String"
         },
@@ -298,33 +298,33 @@
     "Mappings": {
         "AWSAMIRegionMap": {
             "eu-west-1": {
-                "AMI": "ami-0fc35be881cce108c"
+                "AMI": "ami-09631710568c18d28"
             }
         },
         "ECSAMIRegionMap": {
             "us-east-1": {
-                "AMI": "ami-011a85ba0ae2013bf"
+                "AMI": "ami-0796380bc6e51157f"
             },
             "us-east-2": {
-                "AMI": "ami-005930c8f6eb929ba"
+                "AMI": "ami-04b61a4d3b11cc8ea"
             },
             "us-west-1": {
-                "AMI": "ami-0d9f6edebb7a71985"
+                "AMI": "ami-0c9bd36a7394439a6"
             },
             "us-west-2": {
-                "AMI": "ami-08a73ef2db6c656e5"
+                "AMI": "ami-0af5f077b70dafc30"
             },
             "eu-west-1": {
-                "AMI": "ami-0f778fb7f41acc3b9"
+                "AMI": "ami-0dc3fa046ca0e570c"
             },
             "eu-west-2": {
-                "AMI": "ami-078d18e79de0fab14"
+                "AMI": "ami-0a9d4bf15de460a01"
             },
             "eu-west-3": {
-                "AMI": "ami-00f450ea3c6b83ffe"
+                "AMI": "ami-0ad28cde309fa32d1"
             },
             "eu-central-1": {
-                "AMI": "ami-0e81c199cc79782ac"
+                "AMI": "ami-0ce9ac8aed24e9ee5"
             }
         }
     },

@@ -290,33 +290,33 @@
     "Mappings": {
         "AWSAMIRegionMap": {
             "eu-west-1": {
-                "AMI": "ami-0e2ef57c1114a572e"
+                "AMI": "ami-09631710568c18d28"
             }
         },
         "ECSAMIRegionMap": {
             "us-east-1": {
-                "AMI": "ami-011a85ba0ae2013bf"
+                "AMI": "ami-0796380bc6e51157f"
             },
             "us-east-2": {
-                "AMI": "ami-005930c8f6eb929ba"
+                "AMI": "ami-04b61a4d3b11cc8ea"
             },
             "us-west-1": {
-                "AMI": "ami-0d9f6edebb7a71985"
+                "AMI": "ami-0c9bd36a7394439a6"
             },
             "us-west-2": {
-                "AMI": "ami-08a73ef2db6c656e5"
+                "AMI": "ami-0af5f077b70dafc30"
             },
             "eu-west-1": {
-                "AMI": "ami-0f778fb7f41acc3b9"
+                "AMI": "ami-0dc3fa046ca0e570c"
             },
             "eu-west-2": {
-                "AMI": "ami-078d18e79de0fab14"
+                "AMI": "ami-0a9d4bf15de460a01"
             },
             "eu-west-3": {
-                "AMI": "ami-00f450ea3c6b83ffe"
+                "AMI": "ami-0ad28cde309fa32d1"
             },
             "eu-central-1": {
-                "AMI": "ami-0e81c199cc79782ac"
+                "AMI": "ami-0ce9ac8aed24e9ee5"
             }
         }
     },
@@ -561,19 +561,6 @@
                         "PropagateAtLaunch": true
                     }
                 ]
-            },
-            "CreationPolicy": {
-                "ResourceSignal": {
-                    "Timeout": "PT60M"
-                }
-            },
-            "UpdatePolicy": {
-                "AutoScalingRollingUpdate": {
-                    "MinInstancesInService": 1,
-                    "MaxBatchSize": 1,
-                    "PauseTime": "PT15M",
-                    "WaitOnResourceSignals": true
-                }
             }
         },
         "ECSLaunchConfiguration": {
@@ -636,7 +623,13 @@
                                 "echo ECS_DISABLE_IMAGE_CLEANUP=false >> /etc/ecs/ecs.config\n",
                                 "echo ECS_IMAGE_CLEANUP_INTERVAL=15m >> /etc/ecs/ecs.config\n",
                                 "echo ECS_IMAGE_MINIMUM_CLEANUP_AGE=1h >> /etc/ecs/ecs.config\n",
-                                "echo ECS_NUM_IMAGES_DELETE_PER_CYCLE=5 >> /etc/ecs/ecs.config\n"
+                                "echo ECS_NUM_IMAGES_DELETE_PER_CYCLE=5 >> /etc/ecs/ecs.config\n",
+                                {
+                                    "Fn::Sub": "/opt/aws/bin/cfn-init -v --region ${AWS::Region} --stack ${AWS::StackName} --resource ECSLaunchConfiguration"
+                                },
+                                {
+                                    "Fn::Sub": "/opt/aws/bin/cfn-signal -e $? --region ${AWS::Region} --stack ${AWS::StackName} --resource ECSAutoScalingGroup"
+                                }
                             ]
                         ]
                     }
