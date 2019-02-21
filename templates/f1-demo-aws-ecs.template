@@ -102,7 +102,7 @@
         "AdminIngressLocation": {
             "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
             "ConstraintDescription": "Must be a valid IP CIDR range of the form x.x.x.x/x",
-            "Description": "CIDR block (IP address range) to allow SSH and VNC access to your TCI-BW studio instance. Use 0.0.0.0/0 to allow access from all locations. You can always manually change this later if needed.",
+            "Description": "CIDR block (IP address range). Use 0.0.0.0/0 to allow access from all locations. You can always manually change this later if needed.",
             "MaxLength": "18",
             "MinLength": "9",
             "Type": "String"
@@ -423,6 +423,25 @@
                 ]
             }
         },
+        "MountTargetSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPCID"
+                },
+                "GroupDescription": "Security group for mount target",
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": {
+                            "Ref": "CIDRBlockCluster"
+                        },
+                        "IpProtocol": "tcp",
+                        "FromPort": "2049",
+                        "ToPort": "2049"
+                    }
+                ]
+            }
+        },
         "ECSHostSecurityGroup": {
             "Type": "AWS::EC2::SecurityGroup",
             "Properties": {
@@ -532,6 +551,11 @@
         },
         "ECSAutoScalingGroup": {
             "Type": "AWS::AutoScaling::AutoScalingGroup",
+            "DependsOn": [
+                "ContainerMountTarget1",
+                "ContainerMountTarget2",
+                "ContainerMountTarget3"
+            ],
             "Properties": {
                 "VPCZoneIdentifier": [
                     {
@@ -613,6 +637,8 @@
                             "",
                             [
                                 "#!/bin/bash\n",
+                                "sudo yum update -y\n",
+                                "sudo yum install -y nfs-utils\n",
                                 "echo ECS_CLUSTER=",
                                 {
                                     "Ref": "ECSCluster"
@@ -624,6 +650,29 @@
                                 "echo ECS_IMAGE_CLEANUP_INTERVAL=15m >> /etc/ecs/ecs.config\n",
                                 "echo ECS_IMAGE_MINIMUM_CLEANUP_AGE=1h >> /etc/ecs/ecs.config\n",
                                 "echo ECS_NUM_IMAGES_DELETE_PER_CYCLE=5 >> /etc/ecs/ecs.config\n",
+                                "EC2_AVAIL_ZONE=`curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone`\n",
+                                "EC2_REGION=",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                "\n",
+                                "mkdir /mnt/efs\n",
+                                "EFS_FILE_SYSTEM_ID=",
+                                {
+                                    "Ref": "ContainerFileSystem"
+                                },
+                                "\n",
+                                "DIR_SRC=$EC2_AVAIL_ZONE.$EFS_FILE_SYSTEM_ID.efs.$EC2_REGION.amazonaws.com\n",
+                                "DIR_TGT=/mnt/efs\n",
+                                "touch /home/ec2-user/echo.res\n",
+                                "echo $EFS_FILE_SYSTEM_ID >> /home/ec2-user/echo.res\n",
+                                "echo $EC2_AVAIL_ZONE >> /home/ec2-user/echo.res\n",
+                                "echo $EC2_REGION >> /home/ec2-user/echo.res\n",
+                                "echo $DIR_SRC >> /home/ec2-user/echo.res\n",
+                                "echo $DIR_TGT >> /home/ec2-user/echo.res\n",
+                                "mount -t nfs4 $DIR_SRC:/ $DIR_TGT >> /home/ec2-user/echo.res\n",
+                                "cp -p /etc/fstab /etc/fstab.back-$(date +%F)\n",
+                                "echo -e \"$DIR_SRC:/ \t\t $DIR_TGT \t\t nfs \t\t defaults \t\t 0 \t\t 0\" | tee -a /etc/fstab\n",
                                 {
                                     "Fn::Sub": "/opt/aws/bin/cfn-init -v --region ${AWS::Region} --stack ${AWS::StackName} --resource ECSLaunchConfiguration"
                                 },
@@ -726,6 +775,7 @@
         },
         "CEPTaskDefinition": {
             "Type": "AWS::ECS::TaskDefinition",
+            "DependsOn": "ECSLaunchConfiguration",
             "Properties": {
                 "ContainerDefinitions": [
                     {
@@ -750,6 +800,13 @@
                                 "Protocol": "tcp"
                             }
                         ],
+                        "MountPoints": [
+                            {
+                                "SourceVolume": "efs",
+                                "ContainerPath": "/usr/share/tls",
+                                "ReadOnly": false
+                            }
+                        ],
                         "Environment": [
                             {
                                 "Name": "NODENAME",
@@ -760,6 +817,14 @@
                                 "Value": "DB_URL=a"
                             }
                         ]
+                    }
+                ],
+                "Volumes": [
+                    {
+                        "Name": "efs",
+                        "Host": {
+                            "SourcePath": "/mnt/efs/share/tls"
+                        }
                     }
                 ],
                 "Memory": "4096",
@@ -855,6 +920,68 @@
                 "PubliclyAccessible": "true",
                 "DBInstanceClass": "db.r4.large",
                 "DBParameterGroupName": "default.aurora-mysql5.7"
+            }
+        },
+        "ContainerFileSystem": {
+            "Type": "AWS::EFS::FileSystem",
+            "Properties": {
+                "PerformanceMode": "generalPurpose",
+                "FileSystemTags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName} - FileSystem"
+                        }
+                    }
+                ]
+            }
+        },
+        "ContainerMountTarget1": {
+            "Type": "AWS::EFS::MountTarget",
+            "Properties": {
+                "FileSystemId": {
+                    "Ref": "ContainerFileSystem"
+                },
+                "SecurityGroups": [
+                    {
+                        "Ref": "MountTargetSecurityGroup"
+                    }
+                ],
+                "SubnetId": {
+                    "Ref": "PublicSubnet1ID"
+                }
+            }
+        },
+        "ContainerMountTarget2": {
+            "Type": "AWS::EFS::MountTarget",
+            "Properties": {
+                "FileSystemId": {
+                    "Ref": "ContainerFileSystem"
+                },
+                "SecurityGroups": [
+                    {
+                        "Ref": "MountTargetSecurityGroup"
+                    }
+                ],
+                "SubnetId": {
+                    "Ref": "PublicSubnet2ID"
+                }
+            }
+        },
+        "ContainerMountTarget3": {
+            "Type": "AWS::EFS::MountTarget",
+            "Properties": {
+                "FileSystemId": {
+                    "Ref": "ContainerFileSystem"
+                },
+                "SecurityGroups": [
+                    {
+                        "Ref": "MountTargetSecurityGroup"
+                    }
+                ],
+                "SubnetId": {
+                    "Ref": "PublicSubnet3ID"
+                }
             }
         },
         "ECSClusterRole": {
