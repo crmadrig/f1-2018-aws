@@ -381,38 +381,13 @@
                 ]
             }
         },
-        "LDMSecurityGroup": {
+        "ContainerSecurityGroup": {
             "Type": "AWS::EC2::SecurityGroup",
             "Properties": {
                 "VpcId": {
                     "Ref": "VPCID"
                 },
-                "GroupDescription": "Security group for LDM container",
-                "SecurityGroupIngress": [
-                    {
-                        "CidrIp": {
-                            "Ref": "CIDRBlockCluster"
-                        },
-                        "IpProtocol": -1
-                    },
-                    {
-                        "CidrIp": {
-                            "Ref": "AdminIngressLocation"
-                        },
-                        "IpProtocol": "tcp",
-                        "FromPort": "10080",
-                        "ToPort": "10080"
-                    }
-                ]
-            }
-        },
-        "CEPSecurityGroup": {
-            "Type": "AWS::EC2::SecurityGroup",
-            "Properties": {
-                "VpcId": {
-                    "Ref": "VPCID"
-                },
-                "GroupDescription": "Security group for CEP container",
+                "GroupDescription": "Security group for F1 Tasks deployed",
                 "SecurityGroupIngress": [
                     {
                         "CidrIp": {
@@ -463,6 +438,126 @@
                         "IpProtocol": "tcp",
                         "FromPort": "22",
                         "ToPort": "22"
+                    }
+                ]
+            }
+        },
+        "IoTEC2StartupSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPCID"
+                },
+                "GroupDescription": "Security group for ec2 instance that creates and initializes AWS IoT certs and server keystore. This security group provides external ssh access and conectivity to your EFS instance.",
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": {
+                            "Ref": "CIDRBlockCluster"
+                        },
+                        "IpProtocol": "tcp",
+                        "FromPort": "2049",
+                        "ToPort": "2049"
+                    },
+                    {
+                        "CidrIp": {
+                            "Ref": "AdminIngressLocation"
+                        },
+                        "IpProtocol": "tcp",
+                        "FromPort": "22",
+                        "ToPort": "22"
+                    }
+                ]
+            }
+        },
+        "IoTCertEC2Setup": {
+            "Type": "AWS::EC2::Instance",
+            "DependsOn": "StreamingThing",
+            "Properties": {
+                "ImageId": {
+                    "Fn::FindInMap": [
+                        "ECSAMIRegionMap",
+                        {
+                            "Ref": "AWS::Region"
+                        },
+                        "AMI"
+                    ]
+                },
+                "InstanceType": "t2.small",
+                "IamInstanceProfile": {
+                    "Ref": "IoTInstanceProfile"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "InstanceInitiatedShutdownBehavior": "terminate",
+                "SecurityGroupIds": [
+                    {
+                        "Ref": "IoTEC2StartupSecurityGroup"
+                    }
+                ],
+                "SubnetId": {
+                    "Ref": "PublicSubnet2ID"
+                },
+                "UserData" :{
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "#!/bin/bash\n",
+                                "echo 'Starting EC2-IoT cert UserData setup...'\n",
+                                "sudo yum update -y\n",
+                                "sudo yum install -y java-1.8.0-openjdk yum-utils nfs-utils\n",
+                                "sudo yum -y groupinstall development\n",
+                                "sudo yum -y install https://centos6.iuscommunity.org/ius-release.rpm\n",
+                                "sudo yum -y install python36u\n",
+                                "sudo yum -y install python36u-pip\n",
+                                "sudo pip3.6 install awscli --upgrade\n",
+                                "EC2_AVAIL_ZONE=`curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone`\n",
+                                "EC2_REGION=",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                "\n",
+                                "sudo mkdir /mnt/efs\n",
+                                "EFS_FILE_SYSTEM_ID=",
+                                {
+                                    "Ref": "ContainerFileSystem"
+                                },
+                                "\n",
+                                "DIR_SRC=$EC2_AVAIL_ZONE.$EFS_FILE_SYSTEM_ID.efs.$EC2_REGION.amazonaws.com\n",
+                                "DIR_TGT=/mnt/efs\n",
+                                "touch /home/ec2-user/echo.res\n",
+                                "echo $EFS_FILE_SYSTEM_ID >> /home/ec2-user/echo.res\n",
+                                "echo $EC2_AVAIL_ZONE >> /home/ec2-user/echo.res\n",
+                                "echo $EC2_REGION >> /home/ec2-user/echo.res\n",
+                                "echo $DIR_SRC >> /home/ec2-user/echo.res\n",
+                                "echo $DIR_TGT >> /home/ec2-user/echo.res\n",
+                                "mount -t nfs4 $DIR_SRC:/ $DIR_TGT >> /home/ec2-user/echo.res\n",
+                                "cp -p /etc/fstab /etc/fstab.back-$(date +%F)\n",
+                                "echo -e \"$DIR_SRC:/ \t\t $DIR_TGT \t\t nfs \t\t defaults \t\t 0 \t\t 0\" | tee -a /etc/fstab\n",
+                                "sudo mkdir -p /mnt/efs/share/tls\n",
+                                "aws iot create-keys-and-certificate --set-as-active --certificate-pem-outfile ./mnt/efs/share/tls/cert.pem --public-key-outfile ./mnt/efs/share/tls/publicKey.pem --private-key-outfile ./mnt/efs/share/tls/privateKey.pem --region ",
+                                {
+                                    "Ref":"AWS::Region"
+                                },
+                                " &> /dev/null\n",
+                                "\n",
+                                "echo 'aws IoT certificates created, these were placed and saved on efs within your /mtn/efs/share/tls folder...'\n",
+                                "curl -o /mnt/efs/share/tls/AmazonRootCA1.crt https://www.amazontrust.com/repository/AmazonRootCA1.pem\n",
+                                "aws iot describe-endpoint --endpoint-type iot:Data-ATS\n"
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "IoTInstanceProfile": {
+            "Type": "AWS::IAM::InstanceProfile",
+            "Properties": {
+                "Path": "/",
+                "Roles": [
+                    {
+                        "Ref": "IoTRole"
                     }
                 ]
             }
@@ -639,24 +734,12 @@
                                 "#!/bin/bash\n",
                                 "sudo yum update -y\n",
                                 "sudo yum install -y nfs-utils\n",
-                                "echo ECS_CLUSTER=",
-                                {
-                                    "Ref": "ECSCluster"
-                                },
-                                " >> /etc/ecs/ecs.config\n",
-                                "echo ECS_CHECKPOINT=false >> /etc/ecs/ecs.config\n",
-                                "echo ECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=8m >> /etc/ecs/ecs.config\n",
-                                "echo ECS_DISABLE_IMAGE_CLEANUP=false >> /etc/ecs/ecs.config\n",
-                                "echo ECS_IMAGE_CLEANUP_INTERVAL=15m >> /etc/ecs/ecs.config\n",
-                                "echo ECS_IMAGE_MINIMUM_CLEANUP_AGE=1h >> /etc/ecs/ecs.config\n",
-                                "echo ECS_NUM_IMAGES_DELETE_PER_CYCLE=5 >> /etc/ecs/ecs.config\n",
                                 "EC2_AVAIL_ZONE=`curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone`\n",
                                 "EC2_REGION=",
                                 {
                                     "Ref": "AWS::Region"
                                 },
                                 "\n",
-                                "mkdir /mnt/efs\n",
                                 "EFS_FILE_SYSTEM_ID=",
                                 {
                                     "Ref": "ContainerFileSystem"
@@ -673,6 +756,17 @@
                                 "mount -t nfs4 $DIR_SRC:/ $DIR_TGT >> /home/ec2-user/echo.res\n",
                                 "cp -p /etc/fstab /etc/fstab.back-$(date +%F)\n",
                                 "echo -e \"$DIR_SRC:/ \t\t $DIR_TGT \t\t nfs \t\t defaults \t\t 0 \t\t 0\" | tee -a /etc/fstab\n",
+                                "echo ECS_CLUSTER=",
+                                {
+                                    "Ref": "ECSCluster"
+                                },
+                                " >> /etc/ecs/ecs.config\n",
+                                "echo ECS_CHECKPOINT=false >> /etc/ecs/ecs.config\n",
+                                "echo ECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=8m >> /etc/ecs/ecs.config\n",
+                                "echo ECS_DISABLE_IMAGE_CLEANUP=false >> /etc/ecs/ecs.config\n",
+                                "echo ECS_IMAGE_CLEANUP_INTERVAL=15m >> /etc/ecs/ecs.config\n",
+                                "echo ECS_IMAGE_MINIMUM_CLEANUP_AGE=1h >> /etc/ecs/ecs.config\n",
+                                "echo ECS_NUM_IMAGES_DELETE_PER_CYCLE=5 >> /etc/ecs/ecs.config\n",
                                 {
                                     "Fn::Sub": "/opt/aws/bin/cfn-init -v --region ${AWS::Region} --stack ${AWS::StackName} --resource ECSLaunchConfiguration"
                                 },
@@ -752,7 +846,7 @@
                     "AwsvpcConfiguration": {
                         "SecurityGroups": [
                             {
-                                "Ref": "LDMSecurityGroup"
+                                "Ref": "ContainerSecurityGroup"
                             }
                         ],
                         "Subnets": [
@@ -849,7 +943,7 @@
                     "AwsvpcConfiguration": {
                         "SecurityGroups": [
                             {
-                                "Ref": "CEPSecurityGroup"
+                                "Ref": "ContainerSecurityGroup"
                             }
                         ],
                         "Subnets": [
@@ -984,6 +1078,12 @@
                 }
             }
         },
+        "StreamingThing": {
+            "Type": "AWS::IoT::Thing",
+            "Properties": {
+                "ThingName": "StreamingThing"
+            }
+        },
         "ECSClusterRole": {
             "Type": "AWS::IAM::Role",
             "Properties": {
@@ -1007,6 +1107,83 @@
                         }
                     ]
                 }
+            }
+        },
+        "IoTRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "Path": "/",
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "iot.amazonaws.com",
+                                    "ec2.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Policies": [
+                    {
+                        "PolicyName": "default-iot-policy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "iot:Publish",
+                                        "iot:Receive",
+                                        "iot:Subscribe",
+                                        "iot:Connect",
+                                        "iot:CreateKeysAndCertificate",
+                                        "iot:DescribeEndpoint"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "PolicyName": "allow-efs-policy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "elasticfilesystem:CreateFileSystem",
+                                        "elasticfilesystem:CreateMountTarget"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "PolicyName": "allow-ec2-policy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "ec2:CreateTags*",
+                                        "ec2:Describe*"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
             }
         }
     },
