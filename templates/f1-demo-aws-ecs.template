@@ -1,6 +1,6 @@
 {
     "AWSTemplateFormatVersion": "2010-09-09",
-    "Description": "This template...",
+    "Description": "This template takes about 25 minutes to deploy. In this template multiple ",
     "Metadata": {
         "AWS::CloudFormation::Interface": {
             "ParameterGroups": [
@@ -532,7 +532,7 @@
                                 "echo $EC2_REGION >> /home/ec2-user/echo.res\n",
                                 "echo $DIR_SRC >> /home/ec2-user/echo.res\n",
                                 "echo $DIR_TGT >> /home/ec2-user/echo.res\n",
-                                "mount -t nfs4 $DIR_SRC:/ $DIR_TGT >> /home/ec2-user/echo.res\n",
+                                "mount -t nfs4 -o nfsvers=4.1 $DIR_SRC:/ $DIR_TGT >> /home/ec2-user/echo.res\n",
                                 "cp -p /etc/fstab /etc/fstab.back-$(date +%F)\n",
                                 "echo -e \"$DIR_SRC:/ \t\t $DIR_TGT \t\t nfs \t\t defaults \t\t 0 \t\t 0\" | tee -a /etc/fstab\n",
                                 "sudo mkdir -p /mnt/efs/share/tls\n",
@@ -684,6 +684,10 @@
         },
         "ECSLaunchConfiguration": {
             "Type": "AWS::AutoScaling::LaunchConfiguration",
+            "DependsOn": [
+                "IoTCertEC2Setup",
+                "ContainerFileSystem"
+            ],
             "Properties": {
                 "ImageId": {
                     "Fn::FindInMap": [
@@ -740,6 +744,7 @@
                                     "Ref": "AWS::Region"
                                 },
                                 "\n",
+                                "sudo mkdir /mnt/efs\n",
                                 "EFS_FILE_SYSTEM_ID=",
                                 {
                                     "Ref": "ContainerFileSystem"
@@ -753,7 +758,7 @@
                                 "echo $EC2_REGION >> /home/ec2-user/echo.res\n",
                                 "echo $DIR_SRC >> /home/ec2-user/echo.res\n",
                                 "echo $DIR_TGT >> /home/ec2-user/echo.res\n",
-                                "mount -t nfs4 $DIR_SRC:/ $DIR_TGT >> /home/ec2-user/echo.res\n",
+                                "mount -t nfs4 -o nfsvers=4.1 $DIR_SRC:/ $DIR_TGT >> /home/ec2-user/echo.res\n",
                                 "cp -p /etc/fstab /etc/fstab.back-$(date +%F)\n",
                                 "echo -e \"$DIR_SRC:/ \t\t $DIR_TGT \t\t nfs \t\t defaults \t\t 0 \t\t 0\" | tee -a /etc/fstab\n",
                                 "echo ECS_CLUSTER=",
