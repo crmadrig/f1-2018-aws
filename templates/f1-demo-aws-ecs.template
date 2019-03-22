@@ -544,7 +544,11 @@
                                 "\n",
                                 "echo 'aws IoT certificates created, these were placed and saved on efs within your /mtn/efs/share/tls folder...'\n",
                                 "curl -o /mnt/efs/share/tls/AmazonRootCA1.crt https://www.amazontrust.com/repository/AmazonRootCA1.pem\n",
-                                "aws iot describe-endpoint --endpoint-type iot:Data-ATS\n"
+                                "cd /mnt/efs/share/tls\n",
+                                "openssl rsa -aes256 -in privateKey.pem -out privateKey.encrypted.pem -passout pass:tibco123\n",
+                                "openssl pkcs12 -export -in cert.pem -inkey privateKey.encrypted.pem -certfile cert.pem -out tempkeystore.p12 -passin pass:tibco123 -passout pass:tibco123\n",
+                                "keytool -importkeystore -destkeystore SBserver.jceks -deststoretype JCEKS -deststorepass tibco123 -destalias 'aws iot cert' -srckeystore tempkeystore.p12 -srcstoretype PKCS12 -srcstorepass tibco123 -srcalias 1\n",
+                                "keytool -importcert -alias 'amazon root ca 1' -file AmazonRootCA1.crt -keystore SBserverTrust.jceks -storetype JCEKS -storepass pass:tibco123 -noprompt\n"
                             ]
                         ]
                     }
