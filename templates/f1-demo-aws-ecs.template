@@ -25,6 +25,15 @@
                 },
                 {
                     "Label": {
+                        "default": "TLS AWS IoT Configuration"
+                    },
+                    "Parameters": [
+                        "KeyStorePassword",
+                        "TrustStorePassword"
+                    ]
+                }
+                {
+                    "Label": {
                         "default": "Spotfire Studio Configuration"
                     },
                     "Parameters": [
@@ -71,6 +80,9 @@
                 "KeyName": {
                     "default": "Key Pair:"
                 },
+                "KeyStorePassword": {
+                    "default": "TLS KeyStore Password:"
+                },
                 "PrivateSubnet1ID": {
                     "default": "Private Subnet ID 1:"
                 },
@@ -88,6 +100,9 @@
                 },
                 "PublicSubnet3ID": {
                     "default": "Public Subnet ID 3:"
+                },
+                "TrustStorePassword": {
+                    "default": "TLS TrustStore Password:"
                 },
                 "VPCID": {
                     "default": "VPC ID"
@@ -194,6 +209,16 @@
             "MinLength": 1,
             "Type": "AWS::EC2::KeyPair::KeyName"
         },
+        "KeyStorePassword": {
+            "AllowedPattern": "[-_ a-zA-Z0-9]*",
+            "ConstraintDescription": "This password is set to encrypt your KeyStore for you AWS IoT connection. The max length is 12 characters and the min length is 8 characters. The default value is to 'tibco123', please change it to secure your deployment.",
+            "Description:": "Password to encrypt and decrypt KeyStore.",
+            "Default": "tibco123",
+            "MaxLength": 12,
+            "MinLength": 8,
+            "NoEcho": "true",
+            "Type": "String"
+        },
         "PrivateSubnet1ID": {
             "Description": "ID of private subnet 1 in Availability Zone 1 for the Workload (e.g., subnet-c0236ecd)",
             "Type": "AWS::EC2::Subnet::Id"
@@ -217,6 +242,16 @@
         "PublicSubnet3ID": {
             "Description": "ID of public subnet 1 in Availability Zone 3",
             "Type": "AWS::EC2::Subnet::Id"
+        },
+        "TrustStorePassword": {
+            "AllowedPattern": "[-_ a-zA-Z0-9]*",
+            "ConstraintDescription": "This password is set to encrypt your TrustStore for you AWS IoT connection. The max length is 12 characters and the min length is 8 characters. The default value is set to 'tibco123', please change it to secure your deployment.",
+            "Description:": "Password to encrypt and decrypt TrustStore.",
+            "Default": "tibco123",
+            "MaxLength": 12,
+            "MinLength": 8,
+            "NoEcho": "true",
+            "Type": "String"
         },
         "VPCID": {
             "Description": "ID of your existing VPC for deployment",
@@ -535,20 +570,46 @@
                                 "mount -t nfs4 -o nfsvers=4.1 $DIR_SRC:/ $DIR_TGT >> /home/ec2-user/echo.res\n",
                                 "cp -p /etc/fstab /etc/fstab.back-$(date +%F)\n",
                                 "echo -e \"$DIR_SRC:/ \t\t $DIR_TGT \t\t nfs \t\t defaults \t\t 0 \t\t 0\" | tee -a /etc/fstab\n",
-                                "sudo mkdir -p /mnt/efs/share/tls\n",
-                                "aws iot create-keys-and-certificate --set-as-active --certificate-pem-outfile ./mnt/efs/share/tls/cert.pem --public-key-outfile ./mnt/efs/share/tls/publicKey.pem --private-key-outfile ./mnt/efs/share/tls/privateKey.pem --region ",
+                                "sudo mkdir -p /mnt/efs/share/sb/tls\n",
+                                "sudo mkdir -p /mnt/efs/share/sb/config\n",
+                                "aws iot create-keys-and-certificate --set-as-active --certificate-pem-outfile ./mnt/efs/share/sb/tls/cert.pem --public-key-outfile ./mnt/efs/share/sb/tls/publicKey.pem --private-key-outfile ./mnt/efs/share/sb/tls/privateKey.pem --region ",
                                 {
                                     "Ref":"AWS::Region"
                                 },
                                 " &> /dev/null\n",
                                 "\n",
-                                "echo 'aws IoT certificates created, these were placed and saved on efs within your /mtn/efs/share/tls folder...'\n",
-                                "curl -o /mnt/efs/share/tls/AmazonRootCA1.crt https://www.amazontrust.com/repository/AmazonRootCA1.pem\n",
-                                "cd /mnt/efs/share/tls\n",
-                                "openssl rsa -aes256 -in privateKey.pem -out privateKey.encrypted.pem -passout pass:tibco123\n",
-                                "openssl pkcs12 -export -in cert.pem -inkey privateKey.encrypted.pem -certfile cert.pem -out tempkeystore.p12 -passin pass:tibco123 -passout pass:tibco123\n",
-                                "keytool -importkeystore -destkeystore SBserver.jceks -deststoretype JCEKS -deststorepass tibco123 -destalias 'aws iot cert' -srckeystore tempkeystore.p12 -srcstoretype PKCS12 -srcstorepass tibco123 -srcalias 1\n",
-                                "keytool -importcert -alias 'amazon root ca 1' -file AmazonRootCA1.crt -keystore SBserverTrust.jceks -storetype JCEKS -storepass pass:tibco123 -noprompt\n"
+                                "echo 'aws IoT certificates created, these were placed and saved on efs within your /mtn/efs/share/sb/tls folder...'\n",
+                                "curl -o /mnt/efs/share/sb/config/adapter-configurations.xml https://raw.githubusercontent.com/crmadrig/f1-2018-aws/develop/files/adapter-configurations.xml\n",
+                                "curl -o /mnt/efs/share/sb/tls/AmazonRootCA1.crt https://www.amazontrust.com/repository/AmazonRootCA1.pem\n",
+                                "cd /mnt/efs/share/sb/tls\n",
+                                "openssl rsa -aes256 -in privateKey.pem -out privateKey.encrypted.pem -passout pass:",
+                                {
+                                    "Ref": "KeyStorePassword"
+                                },
+                                "\n",
+                                "openssl pkcs12 -export -in cert.pem -inkey privateKey.encrypted.pem -certfile cert.pem -out tempkeystore.p12 -passin pass:",
+                                {
+                                    "Ref": "KeyStorePassword"
+                                },
+                                " -passout pass:",
+                                {
+                                    "Ref": "KeyStorePassword"
+                                },
+                                "\n",
+                                "keytool -importkeystore -destkeystore SBserver.jceks -deststoretype JCEKS -deststorepass ",
+                                {
+                                    "Ref": "KeyStorePassword"
+                                },
+                                " -destalias 'aws iot cert' -srckeystore tempkeystore.p12 -srcstoretype PKCS12 -srcstorepass ",
+                                {
+                                    "Ref": "KeyStorePassword"
+                                },
+                                " -srcalias 1\n",
+                                "keytool -importcert -alias 'amazon root ca 1' -file AmazonRootCA1.crt -keystore SBserverTrust.jceks -storetype JCEKS -storepass pass:",
+                                {
+                                    "Ref": "TrustStorePassword"
+                                },
+                                " -noprompt\n"
                             ]
                         ]
                     }
@@ -906,7 +967,7 @@
                         "MountPoints": [
                             {
                                 "SourceVolume": "efs",
-                                "ContainerPath": "/usr/share/tls",
+                                "ContainerPath": "/usr/share/sb",
                                 "ReadOnly": false
                             }
                         ],
@@ -926,7 +987,7 @@
                     {
                         "Name": "efs",
                         "Host": {
-                            "SourcePath": "/mnt/efs/share/tls"
+                            "SourcePath": "/mnt/efs/share/sb"
                         }
                     }
                 ],
